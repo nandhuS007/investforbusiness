@@ -1,0 +1,72 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "System users including buyers, sellers, and admins",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "email": { "type": "string", "format": "email" },
+        "phone": { "type": "string" },
+        "role": { "type": "string", "enum": ["buyer", "seller", "admin"] },
+        "subscription": {
+          "type": "object",
+          "properties": {
+            "planId": { "type": "string" },
+            "active": { "type": "boolean" },
+            "expiryDate": { "type": "string", "format": "date-time" }
+          }
+        }
+      },
+      "required": ["name", "email", "role"]
+    },
+    "Business": {
+      "title": "Business",
+      "description": "Business listings for sale",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string" },
+        "category": { "type": "string", "enum": ["Micro Business", "Partnership Sale", "Full Business", "Investment"] },
+        "price": { "type": "number" },
+        "location": { "type": "string" },
+        "description": { "type": "string" },
+        "revenue": { "type": "number" },
+        "profit": { "type": "number" },
+        "yearsOfOperation": { "type": "number" },
+        "documents": { "type": "array", "items": { "type": "string" } },
+        "images": { "type": "array", "items": { "type": "string" } },
+        "status": { "type": "string", "enum": ["under_review", "approved", "rejected"] },
+        "isFeatured": { "type": "boolean" },
+        "ownerId": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["title", "category", "price", "location", "ownerId", "status"]
+    },
+    "Enquiry": {
+      "title": "Enquiry",
+      "description": "User enquiries for business listings",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "businessId": { "type": "string" },
+        "message": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "businessId", "message"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "User profiles and roles"
+    },
+    "/businesses/{businessId}": {
+      "schema": "Business",
+      "description": "Business listings"
+    },
+    "/enquiries/{enquiryId}": {
+      "schema": "Enquiry",
+      "description": "Customer enquiries"
+    }
+  }
+}

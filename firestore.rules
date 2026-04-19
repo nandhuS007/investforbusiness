@@ -1,0 +1,100 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // 0. Global Safety Net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // --- Helpers ---
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isAdmin() {
+      return isSignedIn() && 
+             exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+             get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    }
+
+    function isSeller() {
+      return isSignedIn() && 
+             exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+             (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'seller' || 
+              get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin');
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    // --- Entity Validations ---
+    function isValidUser(data) {
+      return data.keys().hasAll(['uid', 'name', 'email', 'role']) &&
+             data.uid == request.auth.uid &&
+             data.role in ['buyer', 'seller', 'admin'] &&
+             data.email is string && data.email.size() <= 256;
+    }
+
+    function isValidBusiness(data) {
+      return data.keys().hasAll(['title', 'category', 'price', 'location', 'ownerId', 'status', 'createdAt']) &&
+             data.title is string && data.title.size() <= 200 &&
+             data.category in ['Micro Business', 'Partnership Sale', 'Full Business', 'Investment'] &&
+             data.price is number && data.price >= 0 &&
+             data.ownerId == request.auth.uid &&
+             data.status in ['under_review', 'approved', 'rejected'] &&
+             data.createdAt == request.time;
+    }
+
+    // --- Collections ---
+
+    // TEST CONNECTION
+    match /test/connection {
+      allow read: if true;
+    }
+
+    // USERS
+    match /users/{userId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && isValidUser(request.resource.data);
+      allow update: if (isOwner(userId) && (
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['name', 'phone', 'subscription', 'role', 'createdAt', 'photoURL']) &&
+        (request.resource.data.role != 'admin' || (resource.data != null && resource.data.role == 'admin'))
+      )) || isAdmin();
+    }
+
+    // BUSINESSES
+    match /businesses/{businessId} {
+      // Public can read approved listings
+      allow get: if true;
+      allow list: if resource.data.status == 'approved';
+
+      allow create: if isSeller() && isValidBusiness(request.resource.data);
+      
+      allow update: if (
+        // Action: Seller updates their own listing (not status or featured)
+        (isOwner(resource.data.ownerId) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['title', 'description', 'price', 'location', 'images', 'documents', 'revenue', 'profit', 'yearsOfOperation'])) ||
+        // Action: Admin updates anything (e.g. status)
+        (isAdmin())
+      );
+      
+      allow delete: if isAdmin() || isOwner(resource.data.ownerId);
+    }
+
+    // ENQUIRIES
+    match /enquiries/{enquiryId} {
+      allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
+      allow read: if isSignedIn() && (
+        request.auth.uid == resource.data.userId || 
+        request.auth.uid == get(/databases/$(database)/documents/businesses/$(resource.data.businessId)).data.ownerId ||
+        isAdmin()
+      );
+    }
+  }
+}
