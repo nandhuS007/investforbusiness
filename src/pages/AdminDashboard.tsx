@@ -3,7 +3,8 @@ import { db } from '../firebase';
 import { collection, query, where, getDocs, updateDoc, doc, orderBy } from 'firebase/firestore';
 import type { BusinessListing } from '../types';
 import Navbar from '../components/Navbar';
-import { Shield, Check, X, Eye, Users, Briefcase, IndianRupee, Clock } from 'lucide-react';
+import Logo from '../components/Logo';
+import { Check, X, Eye, Users, Briefcase, Clock } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { Link } from 'react-router-dom';
 
@@ -51,12 +52,10 @@ const AdminDashboard: React.FC = () => {
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col md:flex-row">
       <aside className="w-full md:w-80 bg-royal-blue text-white p-10 flex flex-col items-center md:items-start shrink-0">
-        <div className="flex items-center gap-3 mb-16">
-          <div className="bg-white/10 p-2 rounded-xl">
-            <Shield className="text-blue-300" size={24} />
-          </div>
-          <span className="text-2xl font-black tracking-tight">Inves4<span className="text-blue-300 italic">Admin</span></span>
-        </div>
+        <Link to="/" className="inline-block mb-16 group hover:scale-105 transition-all">
+          <Logo isWhite className="h-10" />
+          <span className="block text-[10px] font-black uppercase tracking-[0.4em] text-blue-300 mt-2 ml-1">Admin Panel</span>
+        </Link>
 
         <nav className="w-full space-y-4">
           <button className="w-full text-left p-4 rounded-2xl bg-white/10 font-bold border border-white/10 transition-all flex items-center gap-4">
