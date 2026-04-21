@@ -1,245 +1,297 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Navbar from '../components/Navbar';
 import { useAuth } from '../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
-import { Check, Shield, Star, Zap } from 'lucide-react';
+import { Check, Shield, Star, Zap, Crown, ArrowRight, Loader2, Info, Gem } from 'lucide-react';
 import { cn } from '../lib/utils';
-import { doc, updateDoc } from 'firebase/firestore';
-import { db } from '../firebase';
-import { handleFirestoreError } from '../services/firestore';
+import { createPlanRequest } from '../services/firestore';
+import { motion } from 'motion/react';
+import type { MembershipPlan } from '../types';
 
-const plans = [
+const plans: {
+  id: MembershipPlan;
+  name: string;
+  priceText: string;
+  description: string;
+  features: string[];
+  icon: any;
+  highlight?: boolean;
+}[] = [
   {
-    id: 'silver',
-    name: 'Silver',
-    price: 999,
-    limit: 5,
-    features: ['5 Business Listings', 'Dashboard Access', 'Standard Support', 'Verified Badge'],
-    icon: <Shield size={24} className="text-slate-400" />,
-    color: 'border-slate-200'
+    id: 'Basic',
+    name: 'Basic',
+    priceText: 'Standard Access',
+    description: 'Entry-level access for small sellers and individual assets.',
+    features: [
+      'Standard listing visibility',
+      'Acquirer enquiries',
+      'Email support',
+      'Merchant dashboard access'
+    ],
+    icon: Shield,
   },
   {
-    id: 'gold',
-    name: 'Gold',
-    price: 2499,
-    limit: 15,
-    features: ['15 Business Listings', 'Priority Dashboard', 'Email Support', 'Verified Badge', 'Document Support'],
-    icon: <Zap size={24} className="text-amber-500" />,
-    color: 'border-amber-200',
-    popular: true
+    id: 'Intermediate',
+    name: 'Intermediate',
+    priceText: 'Growth Focus',
+    description: 'Enhanced visibility for growing businesses seeking faster acquisition.',
+    features: [
+      'Enhanced search visibility',
+      'Better market exposure',
+      'Priority ticket support',
+      'Historical performance data'
+    ],
+    icon: Zap,
+    highlight: true,
   },
   {
-    id: 'platinum',
+    id: 'Platinum',
     name: 'Platinum',
-    price: 4999,
-    limit: 'Unlimited',
-    features: ['Unlimited Listings', 'Featured Homepage Ads', 'Direct Admin Sync', 'Premium Verified Badge', 'Institutional Access'],
-    icon: <Star size={24} className="text-royal-blue" />,
-    color: 'border-royal-blue'
+    priceText: 'Institutional Tier',
+    description: 'Maximum visibility and direct institutional reach for high-value assets.',
+    features: [
+      'Top homepage placement',
+      'Featured platinum badge',
+      'Unlimited business listings',
+      'Dedicated concierge support',
+      'Verification assistance'
+    ],
+    icon: Crown,
+  },
+  {
+    id: 'Diamond',
+    name: 'Diamond',
+    priceText: 'Global Strategic',
+    description: 'The pinnacle of asset visibility. Absolute dominance in search and direct institutional pitch distribution.',
+    features: [
+      'Guaranteed #1 search ranking',
+      'Direct pitch to institutional funds',
+      'White-glove asset verification',
+      'Unlimited premium listings',
+      '24/7 dedicated account executive'
+    ],
+    icon: Gem,
   }
 ];
 
 const Pricing: React.FC = () => {
-  const { user } = useAuth();
+  const { user, isSeller, loading: authLoading } = useAuth();
   const navigate = useNavigate();
-  const [loading, setLoading] = useState<string | null>(null);
-  const razorpayKey = import.meta.env.VITE_RAZORPAY_KEY_ID;
+  const [submitting, setSubmitting] = useState<string | null>(null);
+  const [success, setSuccess] = useState(false);
 
-  const loadRazorpay = () => {
-    return new Promise((resolve) => {
-      const script = document.createElement('script');
-      script.src = 'https://checkout.razorpay.com/v1/checkout.js';
-      script.async = true;
-      script.onload = () => resolve(true);
-      script.onerror = () => resolve(false);
-      document.body.appendChild(script);
-    });
-  };
+  useEffect(() => {
+    if (!authLoading && user && !isSeller) {
+      // If logged in but not a seller, they shouldn't see this
+      navigate('/');
+    }
+  }, [user, isSeller, authLoading, navigate]);
 
-  const handleSubscribe = async (plan: typeof plans[0]) => {
+  const handleRequestPlan = async (plan: typeof plans[0]) => {
     if (!user) {
       navigate('/login', { state: { from: { pathname: '/pricing' } } });
       return;
     }
 
-    if (!razorpayKey) {
-      alert("Razorpay Key ID is not configured. Please add VITE_RAZORPAY_KEY_ID in Secrets.");
-      return;
-    }
-
-    setLoading(plan.id);
-
+    setSubmitting(plan.id);
     try {
-      // 1. Load Razorpay Script
-      const isLoaded = await loadRazorpay();
-      if (!isLoaded) {
-        alert("Razorpay SDK failed to load. Are you online?");
-        setLoading(null);
-        return;
-      }
-
-      // 2. Create Order in Backend
-      const orderRes = await fetch('/api/payment/order', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ amount: plan.price })
-      });
-      const orderData = await orderRes.json();
-
-      if (!orderData.id) {
-        throw new Error(orderData.error || "Failed to create order");
-      }
-
-      // 3. Open Razorpay Checkout
-      const options = {
-        key: razorpayKey,
-        amount: orderData.amount,
-        currency: orderData.currency,
-        name: "Invest 4 Business",
-        description: `Subscription: ${plan.name} Plan`,
-        image: "/input_file_0.png",
-        order_id: orderData.id,
-        handler: async (response: any) => {
-          try {
-            // 4. Verify Payment in Backend
-            const verifyRes = await fetch('/api/payment/verify', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                razorpay_order_id: response.razorpay_order_id,
-                razorpay_payment_id: response.razorpay_payment_id,
-                razorpay_signature: response.razorpay_signature
-              })
-            });
-            const verifyData = await verifyRes.json();
-
-            if (verifyData.verified) {
-              // 5. Update User Profile in Firestore
-              const userRef = doc(db, 'users', user.uid);
-              await updateDoc(userRef, {
-                role: 'seller',
-                subscription: {
-                  planId: plan.id,
-                  active: true,
-                  paymentId: response.razorpay_payment_id,
-                  expiryDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
-                }
-              });
-              alert(`Successfully subscribed to ${plan.name} plan! Welcome, Seller.`);
-              navigate('/seller');
-            } else {
-              alert("Payment verification failed. Please contact support.");
-            }
-          } catch (err) {
-            handleFirestoreError(err, 'update', `users/${user.uid}`);
-          }
-        },
-        prefill: {
-          name: user.name,
-          email: user.email,
-        },
-        theme: {
-          color: "#1a237e"
-        }
-      };
-
-      const rzp1 = new (window as any).Razorpay(options);
-      rzp1.open();
+      await createPlanRequest(plan.id);
+      setSuccess(true);
+      window.scrollTo({ top: 0, behavior: 'smooth' });
     } catch (error: any) {
-      console.error("Subscription process failed:", error);
-      alert(error.message || "Something went wrong during subscription.");
+      alert("Request failed: " + error.message);
     } finally {
-      setLoading(null);
+      setSubmitting(null);
     }
   };
 
+  if (authLoading) return (
+    <div className="min-h-screen flex items-center justify-center bg-white text-royal-blue font-black tracking-widest uppercase text-xs">
+      Initialising Pricing Grid...
+    </div>
+  );
+
   return (
-    <div className="min-h-screen bg-slate-50">
+    <div className="min-h-screen bg-white">
       <Navbar />
-      <div className="max-w-7xl mx-auto px-4 py-24">
-        <div className="text-center mb-20">
-          <h2 className="text-sm font-black uppercase tracking-[0.3em] text-blue-500 mb-4">Pricing Plans</h2>
-          <h1 className="text-4xl md:text-6xl font-black text-royal-blue mb-6 tracking-tight">
-            Choose Your <span className="italic font-serif">Growth</span> Strategy
-          </h1>
-          <p className="text-slate-500 text-lg max-w-2xl mx-auto font-medium">
-            Connect your business with the right investors through our premium listing packages.
-          </p>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-          {plans.map((plan) => (
-            <div 
-              key={plan.id} 
-              className={cn(
-                "relative bg-white p-10 rounded-[40px] border-2 transition-all duration-500 hover:shadow-2xl flex flex-col group",
-                plan.color,
-                plan.popular ? "shadow-xl shadow-amber-500/10 scale-105 z-10" : "shadow-sm"
-              )}
+      
+      <div className="relative pt-32 pb-40 px-6 overflow-hidden">
+        {/* Decorative elements */}
+        <div className="absolute top-0 left-0 w-full h-[600px] bg-royal-blue/[0.02] -skew-y-3 origin-top-left" />
+        <div className="absolute top-[20%] right-[-10%] w-[40%] h-[600px] bg-blue-500/[0.03] rounded-full blur-[120px]" />
+        
+        <div className="relative max-w-7xl mx-auto z-10">
+          <div className="text-center mb-24 space-y-6">
+            <motion.div 
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="inline-flex items-center gap-3 px-5 py-2 bg-royal-blue text-white rounded-full text-[10px] font-black uppercase tracking-[0.3em]"
             >
-              {plan.popular && (
-                <div className="absolute -top-4 left-1/2 -translate-x-1/2 bg-amber-500 text-white text-[10px] font-black uppercase tracking-widest px-4 py-1.5 rounded-full shadow-lg">
-                  Most Popular
-                </div>
-              )}
+              <Star size={12} className="fill-current" />
+              Sellers Perspective
+            </motion.div>
+            
+            <motion.h1 
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.1 }}
+              className="text-5xl md:text-8xl font-black text-royal-blue leading-[0.9] tracking-tighter"
+            >
+              Institutional <br />
+              <span className="text-blue-500">Tier Matrix.</span>
+            </motion.h1>
+            
+            <motion.p 
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.2 }}
+              className="text-slate-400 text-lg md:text-xl max-w-2xl mx-auto font-medium"
+            >
+              Select your membership level to determine visibility algorithms 
+              and acquisition priority across our global network.
+            </motion.p>
+          </div>
 
-              <div className="flex items-center gap-4 mb-8">
-                <div className="bg-slate-50 p-3 rounded-2xl group-hover:scale-110 transition-transform">
-                  {plan.icon}
-                </div>
-                <h3 className="text-2xl font-black text-royal-blue">{plan.name}</h3>
+          {success && (
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.9 }}
+              animate={{ opacity: 1, scale: 1 }}
+              className="mb-16 max-w-3xl mx-auto bg-green-50 border border-green-200 p-10 rounded-[40px] text-center space-y-6 shadow-2xl shadow-green-500/10"
+            >
+              <div className="w-20 h-20 bg-green-500 text-white rounded-full flex items-center justify-center mx-auto shadow-xl">
+                 <Check size={40} />
               </div>
-
-              <div className="mb-8">
-                <div className="flex items-baseline gap-1">
-                  <span className="text-4xl font-black text-royal-blue tracking-tighter">₹{plan.price}</span>
-                  <span className="text-slate-400 font-bold">/month</span>
-                </div>
-              </div>
-
-              <ul className="space-y-4 mb-10 flex-1">
-                {plan.features.map((feature, idx) => (
-                  <li key={idx} className="flex items-center gap-3 text-slate-600 font-medium text-sm">
-                    <div className="bg-blue-50 p-1 rounded-full shrink-0">
-                      <Check size={12} className="text-blue-500" />
-                    </div>
-                    {feature}
-                  </li>
-                ))}
-              </ul>
-
+              <h3 className="text-3xl font-black text-green-900">Request Dispatched</h3>
+              <p className="text-green-700 font-bold">
+                Your plan request has been sent to admin for approval. 
+                We will notify you once your institutional visibility has been updated.
+              </p>
               <button 
-                onClick={() => handleSubscribe(plan)}
-                disabled={loading !== null}
+                onClick={() => navigate('/merchant')}
+                className="px-8 py-4 bg-green-600 text-white rounded-2xl font-black uppercase tracking-widest text-[11px] hover:bg-green-700 transition-all"
+              >
+                Return to Hub
+              </button>
+            </motion.div>
+          )}
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8 items-end">
+            {plans.map((plan, idx) => (
+              <motion.div
+                key={plan.id}
+                initial={{ opacity: 0, y: 40 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.3 + idx * 0.1 }}
                 className={cn(
-                  "w-full py-5 rounded-2xl font-black text-lg transition-all active:scale-[0.98] shadow-xl",
-                  plan.popular ? "bg-royal-blue text-white shadow-royal-blue/30" : "bg-slate-100 text-royal-blue hover:bg-slate-200 shadow-slate-200/50"
+                  "relative group flex flex-col transition-all duration-700",
+                  plan.id === 'Platinum' || plan.id === 'Diamond' ? "z-20 md:-translate-y-8" : "z-10"
                 )}
               >
-                {loading === plan.id ? (
-                  <div className="flex items-center justify-center gap-2">
-                    <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                    Processing...
+                {plan.id === 'Diamond' && (
+                  <div className="absolute -top-6 left-1/2 -translate-x-1/2 px-6 py-2 bg-royal-blue text-white text-[10px] font-black uppercase tracking-[0.3em] rounded-full shadow-2xl z-30 whitespace-nowrap">
+                    Pinnacle Tier
                   </div>
-                ) : (
-                  user?.subscription?.planId === plan.id ? "Current Plan" : "Get Started"
                 )}
-              </button>
-            </div>
-          ))}
-        </div>
 
-        <div className="mt-24 bg-royal-blue rounded-[40px] p-12 text-center relative overflow-hidden">
-          <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full -translate-y-1/2 translate-x-1/2" />
-          <h2 className="text-3xl font-black text-white mb-4">Need a custom enterprise solution?</h2>
-          <p className="text-blue-200 mb-8 max-w-xl mx-auto font-medium">
-            For major acquisitions and institutional portfolios, we offer white-glove service and dedicated advisory teams.
-          </p>
-          <button className="bg-white text-royal-blue px-10 py-4 rounded-2xl font-black hover:scale-105 transition-all shadow-2xl">
-            Contact Advisory Team
-          </button>
+                <div className={cn(
+                  "bg-white p-8 rounded-[60px] border transition-all duration-500 flex flex-col h-full",
+                  plan.id === 'Diamond'
+                    ? "border-royal-blue shadow-[0_40px_80px_rgba(30,58,138,0.15)] ring-4 ring-royal-blue/5 scale-105"
+                    : (plan.id === 'Platinum' 
+                        ? "border-amber-400 shadow-[0_40px_80px_rgba(251,191,36,0.15)] ring-4 ring-amber-400/5" 
+                        : "border-slate-100 hover:border-royal-blue/20 shadow-sm hover:shadow-2xl hover:shadow-royal-blue/5")
+                )}>
+                  <div className="mb-10">
+                    <div className={cn(
+                      "w-14 h-14 rounded-[20px] flex items-center justify-center mb-6 shadow-inner",
+                      plan.id === 'Diamond' ? "bg-royal-blue text-white" : (plan.id === 'Platinum' ? "bg-amber-400 text-royal-blue" : "bg-royal-blue/5 text-royal-blue")
+                    )}>
+                      <plan.icon size={28} />
+                    </div>
+                    <h3 className="text-2xl font-black text-royal-blue mb-2 tracking-tight">{plan.name}</h3>
+                    <p className="text-[10px] font-black uppercase tracking-[0.2em] text-blue-500 mb-4">{plan.priceText}</p>
+                    <p className="text-slate-400 text-xs font-bold leading-relaxed">{plan.description}</p>
+                  </div>
+
+                  <div className="space-y-4 mb-12 flex-1">
+                     <p className="text-[9px] font-black uppercase tracking-widest text-slate-300">Feature set</p>
+                     <ul className="space-y-4">
+                       {plan.features.map((feature, i) => (
+                         <li key={i} className="flex gap-3 text-xs font-bold text-slate-600">
+                            <div className={cn(
+                              "w-4 h-4 rounded-md flex items-center justify-center shrink-0 mt-0.5",
+                              plan.id === 'Diamond' ? "bg-royal-blue/10 text-royal-blue" : (plan.id === 'Platinum' ? "bg-amber-100 text-amber-600" : "bg-royal-blue/5 text-royal-blue/40")
+                            )}>
+                               <Check size={12} />
+                            </div>
+                            {feature}
+                         </li>
+                       ))}
+                     </ul>
+                  </div>
+
+                  <button
+                    onClick={() => handleRequestPlan(plan)}
+                    disabled={submitting !== null || success}
+                    className={cn(
+                      "w-full py-5 rounded-[28px] font-black text-[10px] uppercase tracking-[0.2em] transition-all flex items-center justify-center gap-3 group/btn overflow-hidden relative",
+                      plan.id === 'Diamond' || plan.id === 'Platinum'
+                        ? "bg-royal-blue text-white shadow-2xl shadow-royal-blue/40 hover:scale-[1.02] active:scale-[0.98]" 
+                        : "bg-slate-50 text-royal-blue border border-slate-100 hover:bg-royal-blue hover:text-white"
+                    )}
+                  >
+                    <span className="relative z-10">
+                      {submitting === plan.id ? "Transmitting..." : "Request Plan"}
+                    </span>
+                    {submitting === plan.id ? (
+                      <Loader2 className="animate-spin relative z-10" size={16} />
+                    ) : (
+                      <ArrowRight size={16} className="relative z-10 group-hover/btn:translate-x-1 transition-transform" />
+                    )}
+                  </button>
+                </div>
+              </motion.div>
+            ))}
+          </div>
+
+          {/* Institutional Note */}
+          <motion.div 
+            initial={{ opacity: 0 }}
+            whileInView={{ opacity: 1 }}
+            viewport={{ once: true }}
+            className="mt-32 p-12 bg-royal-blue relative rounded-[60px] overflow-hidden text-center md:text-left flex flex-col md:flex-row items-center justify-between gap-12"
+          >
+            <div className="absolute inset-0 bg-gradient-to-r from-royal-blue to-blue-900 opacity-50" />
+            
+            <div className="relative z-10 max-w-lg">
+               <div className="flex items-center gap-3 text-blue-300 font-black uppercase tracking-[0.3em] text-[10px] mb-6">
+                  <Info size={16} />
+                  Institutional Notice
+               </div>
+               <h4 className="text-3xl font-black text-white mb-4 tracking-tight">Manual Verification Protocol</h4>
+               <p className="text-blue-200/80 font-bold leading-relaxed">
+                  Inves4Business maintains an audited registry. All plan requests are subject 
+                  to manual document verification by our compliance team before activation.
+               </p>
+            </div>
+            
+            <div className="relative z-10 shrink-0">
+               <button 
+                 onClick={() => navigate('/merchant/listings')}
+                 className="px-12 py-6 bg-white text-royal-blue rounded-3xl font-black uppercase tracking-widest text-[11px] shadow-2xl hover:scale-105 active:scale-95 transition-all"
+               >
+                 Start Listing Asset
+               </button>
+            </div>
+          </motion.div>
         </div>
       </div>
+
+      <footer className="py-20 border-t border-slate-50 text-center">
+         <p className="text-[10px] font-black uppercase tracking-[0.5em] text-slate-300">
+           Secured Strategic Acquisitions • Inves4Business Platform
+         </p>
+      </footer>
     </div>
   );
 };

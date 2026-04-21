@@ -2,7 +2,7 @@ import React, { createContext, useContext, useEffect, useState } from "react";
 import { onAuthStateChanged, type User } from "firebase/auth";
 import { doc, getDoc, setDoc, serverTimestamp, onSnapshot } from "firebase/firestore";
 import { auth, db } from "../firebase";
-import type { UserProfile } from "../types";
+import type { UserProfile, UserRole } from "../types";
 
 interface AuthContextType {
   user: (User & UserProfile) | null;
@@ -38,22 +38,52 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           // Initial check/create
           const userSnap = await getDoc(userRef);
           if (!userSnap.exists()) {
+            // Bootstrapped Admin: Auto-promote developer to admin
+            const isDeveloper = firebaseUser.email === 'nandhanandha2425@gmail.com';
+            
             await setDoc(userRef, {
               uid: firebaseUser.uid,
               name: firebaseUser.displayName || 'User',
               email: firebaseUser.email || '',
-              role: 'buyer',
+              role: isDeveloper ? 'admin' : 'acquirer',
               createdAt: serverTimestamp(),
             });
           }
 
           // Live sync the profile
-          unsubscribeProfile = onSnapshot(userRef, (doc) => {
-            if (doc.exists()) {
-              const profile = doc.data() as UserProfile;
-              setUser({ ...firebaseUser, ...profile } as any);
-              setLoading(false);
+          unsubscribeProfile = onSnapshot(userRef, (docSnap) => {
+            if (docSnap.exists()) {
+              const profile = docSnap.data() as UserProfile;
+              // Sanitized user object to avoid circular references
+              const sanitizedUser = {
+                uid: firebaseUser.uid,
+                email: firebaseUser.email,
+                emailVerified: firebaseUser.emailVerified,
+                isAnonymous: firebaseUser.isAnonymous,
+                displayName: firebaseUser.displayName,
+                photoURL: firebaseUser.photoURL,
+                ...profile
+              };
+              setUser(sanitizedUser as any);
+            } else {
+              // Fallback for new users before doc creation propagates
+              const isDev = firebaseUser.email === 'nandhanandha2425@gmail.com';
+              const sanitizedUser = {
+                uid: firebaseUser.uid,
+                email: firebaseUser.email,
+                emailVerified: firebaseUser.emailVerified,
+                isAnonymous: firebaseUser.isAnonymous,
+                displayName: firebaseUser.displayName,
+                photoURL: firebaseUser.photoURL,
+                role: (isDev ? 'admin' : 'acquirer') as UserRole,
+                status: 'active' as const
+              };
+              setUser(sanitizedUser as any);
             }
+            setLoading(false);
+          }, (error) => {
+            console.error("Profile sync error:", error);
+            setLoading(false);
           });
         } else {
           setUser(null);
@@ -71,7 +101,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
   }, []);
 
-  const isAdmin = user?.role === 'admin';
+  const isAdmin = user?.role === 'admin' || user?.email === 'nandhanandha2425@gmail.com';
   const isSeller = user?.role === 'seller';
 
   return (

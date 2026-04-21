@@ -1,9 +1,10 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Briefcase, User, LogOut, Menu, X } from 'lucide-react';
+import { Briefcase, User, LogOut, Menu, X, Bell } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
-import { auth } from '../firebase';
+import { db, auth } from '../firebase';
 import { signOut } from 'firebase/auth';
+import { collection, query, where, onSnapshot } from 'firebase/firestore';
 import { cn } from '../lib/utils';
 import Logo from './Logo';
 
@@ -11,11 +12,36 @@ const Navbar: React.FC = () => {
   const { user, isAdmin, isSeller } = useAuth();
   const navigate = useNavigate();
   const [isMenuOpen, setIsMenuOpen] = React.useState(false);
+  const [hasUnread, setHasUnread] = useState(false);
+
+  const userId = user?.uid;
+
+  useEffect(() => {
+    // Reset state when user changes
+    window.requestAnimationFrame(() => setHasUnread(false));
+    if (!userId) return;
+
+    const q = query(
+      collection(db, "notifications"), 
+      where("userId", "==", userId),
+      where("read", "==", false)
+    );
+    const unsubscribe = onSnapshot(q, (snap) => {
+      setHasUnread(!snap.empty);
+    }, (error) => {
+      console.error("Notification sync error:", error);
+    });
+    return () => {
+      if (unsubscribe) unsubscribe();
+    };
+  }, [userId]);
 
   const handleLogout = async () => {
     await signOut(auth);
     navigate('/');
   };
+
+  const dashboardPath = isAdmin ? '/admin' : (isSeller ? '/merchant' : '/acquirer');
 
   return (
     <nav className={cn(
@@ -32,7 +58,9 @@ const Navbar: React.FC = () => {
         <div className="hidden md:ml-10 md:flex md:space-x-8">
           <Link to="/" className="text-blue-100 hover:text-white font-medium transition-colors">Home</Link>
           <Link to="/about" className="text-blue-100 hover:text-white font-medium transition-colors">How it works</Link>
-          <Link to="/pricing" className="text-blue-100 hover:text-white font-medium transition-colors">Pricing</Link>
+          {(isAdmin || isSeller) && (
+            <Link to="/pricing" className="text-blue-100 hover:text-white font-medium transition-colors">Pricing</Link>
+          )}
         </div>
       </div>
 
@@ -40,8 +68,8 @@ const Navbar: React.FC = () => {
         {user ? (
           <div className="flex items-center space-x-4">
             <Link 
-              to={isAdmin ? '/admin' : (isSeller ? '/seller' : '/profile')}
-              className="flex items-center gap-2 text-blue-100 hover:text-white font-semibold transition-colors"
+              to={dashboardPath}
+              className="flex items-center gap-2 text-blue-100 hover:text-white font-semibold transition-colors relative"
             >
               <div className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center text-white overflow-hidden shadow-inner border border-white/20">
                 {user.photoURL ? (
@@ -50,7 +78,8 @@ const Navbar: React.FC = () => {
                   <User size={18} />
                 )}
               </div>
-              <span>{user.name.split(' ')[0]}</span>
+              <span>{isAdmin ? 'Admin Panel' : user.name.split(' ')[0]}</span>
+              {hasUnread && <span className="absolute -top-1 -left-1 w-3 h-3 bg-red-500 rounded-full border-2 border-royal-blue" />}
             </Link>
             <button 
               onClick={handleLogout}
@@ -61,10 +90,10 @@ const Navbar: React.FC = () => {
             </button>
             {isSeller && (
               <Link 
-                to="/seller/add-listing"
+                to="/merchant/add-listing"
                 className="bg-white text-royal-blue px-6 py-2.5 rounded-xl font-bold hover:bg-blue-50 transition-all shadow-lg"
               >
-                Post a Business
+                List Asset
               </Link>
             )}
           </div>
@@ -74,7 +103,7 @@ const Navbar: React.FC = () => {
               Login
             </Link>
             <Link to="/register" className="bg-white text-royal-blue px-6 py-2.5 rounded-xl font-bold hover:bg-blue-50 transition-all shadow-lg">
-              Join as Seller
+              Get Started
             </Link>
           </div>
         )}
@@ -93,10 +122,12 @@ const Navbar: React.FC = () => {
         <div className="md:hidden bg-white border-t border-slate-50 absolute w-full shadow-xl">
           <div className="px-4 pt-2 pb-6 space-y-1">
             <Link to="/" className="block px-3 py-4 text-base font-medium text-slate-600 hover:bg-slate-50 rounded-lg">Home</Link>
-            <Link to="/pricing" className="block px-3 py-4 text-base font-medium text-slate-600 hover:bg-slate-50 rounded-lg">Pricing</Link>
+            {(isAdmin || isSeller) && (
+              <Link to="/pricing" className="block px-3 py-4 text-base font-medium text-slate-600 hover:bg-slate-50 rounded-lg">Pricing</Link>
+            )}
             {user ? (
               <>
-                <Link to="/profile" className="block px-3 py-4 text-base font-medium text-slate-600 hover:bg-slate-50 rounded-lg">Profile</Link>
+                <Link to={dashboardPath} className="block px-3 py-4 text-base font-medium text-slate-600 hover:bg-slate-50 rounded-lg">Dashboard</Link>
                 <button 
                   onClick={handleLogout}
                   className="w-full text-left px-3 py-4 text-base font-medium text-red-600 hover:bg-red-50 rounded-lg"

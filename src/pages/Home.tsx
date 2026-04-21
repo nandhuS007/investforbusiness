@@ -5,19 +5,32 @@ import type { BusinessListing } from '../types';
 import BusinessCard from '../components/BusinessCard';
 import Navbar from '../components/Navbar';
 import Logo from '../components/Logo';
-import { Search, MapPin, Filter, ArrowRight, Briefcase } from 'lucide-react';
+import { Search, MapPin, Filter, ArrowRight, Briefcase, Globe, CircleDollarSign, IndianRupee } from 'lucide-react';
 import { motion } from 'motion/react';
+import { cn } from '../lib/utils';
 
 const Home: React.FC = () => {
   const [listings, setListings] = useState<BusinessListing[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
-  const [location, setLocation] = useState('');
+  const [countryFilter, setCountryFilter] = useState('All');
+  const [categoryFilter, setCategoryFilter] = useState('All');
+  const [minPrice, setMinPrice] = useState<string>('');
+  const [maxPrice, setMaxPrice] = useState<string>('');
+  const [showFilters, setShowFilters] = useState(false);
 
   useEffect(() => {
     const loadData = async () => {
+      setLoading(true);
       try {
-        const data = await getApprovedBusinesses();
+        const data = await getApprovedBusinesses({ 
+          country: countryFilter,
+          category: categoryFilter,
+          minPrice: minPrice ? Number(minPrice) : undefined,
+          maxPrice: maxPrice ? Number(maxPrice) : undefined,
+          search: search,
+          limitCount: 50 // Simple limit for performance
+        });
         setListings(data);
       } catch (error) {
         console.error("Error loading businesses:", error);
@@ -25,209 +38,213 @@ const Home: React.FC = () => {
         setLoading(false);
       }
     };
-    loadData();
-  }, []);
 
-  const filteredListings = listings.filter(biz => 
-    (biz.title.toLowerCase().includes(search.toLowerCase()) || biz.category.toLowerCase().includes(search.toLowerCase())) &&
-    biz.location.toLowerCase().includes(location.toLowerCase())
-  );
+    // Debounce effects
+    const timer = setTimeout(() => {
+       loadData();
+    }, 400);
+
+    return () => clearTimeout(timer);
+  }, [countryFilter, categoryFilter, minPrice, maxPrice, search]);
 
   return (
-    <div className="min-h-screen">
+    <div className="min-h-screen bg-[#F9FAFB]">
       <Navbar />
 
       {/* Hero Section */}
-      <section className="relative bg-royal-blue pt-20 pb-40 px-4 overflow-hidden">
-        <div className="absolute top-0 right-0 w-1/2 h-full bg-blue-500/10 skew-x-[-20deg] translate-x-1/2" />
-        <div className="absolute bottom-0 left-0 w-64 h-64 bg-blue-400/10 rounded-full blur-3xl -translate-x-1/2 translate-y-1/2" />
+      <section className="relative pt-24 pb-32 px-6 overflow-hidden bg-white">
+        <div className="absolute top-0 right-0 w-[40%] h-full bg-royal-blue/5 rounded-l-[120px] skew-x-[-12deg] translate-x-32" />
         
-        <div className="relative max-w-6xl mx-auto text-center z-10">
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.6 }}
-          >
-            <h1 className="text-4xl md:text-6xl lg:text-7xl font-extrabold text-white mb-6 leading-[1.1] tracking-tight">
-              India's Premier <span className="text-blue-300 italic font-serif">Business</span> <br /> 
-              Marketplace
-            </h1>
-            <p className="text-blue-100 text-lg md:text-xl max-w-2xl mx-auto mb-12 font-medium opacity-90">
-              The trusted platform for buying and selling businesses. Connect with institutional investors and ambitious entrepreneurs.
-            </p>
-          </motion.div>
-
-          {/* Search Box */}
-          <motion.div 
-            initial={{ opacity: 0, scale: 0.95 }}
-            animate={{ opacity: 1, scale: 1 }}
-            transition={{ delay: 0.2, duration: 0.5 }}
-            className="max-w-4xl mx-auto p-2 bg-white/10 backdrop-blur-xl rounded-3xl border border-white/20 shadow-2xl"
-          >
-            <div className="flex flex-col md:flex-row gap-2 bg-white rounded-2xl p-2">
-              <div className="flex-1 flex items-center px-4 py-3 border-b md:border-b-0 md:border-r border-slate-100">
-                <Search className="text-slate-400 mr-3 shrink-0" size={20} />
-                <input 
-                  type="text" 
-                  placeholder="What are you looking for?"
-                  className="w-full outline-none text-slate-700 font-medium placeholder:text-slate-400"
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                />
-              </div>
-              <div className="flex-1 flex items-center px-4 py-3">
-                <MapPin className="text-slate-400 mr-3 shrink-0" size={20} />
-                <input 
-                  type="text" 
-                  placeholder="Location (e.g. Mumbai)"
-                  className="w-full outline-none text-slate-700 font-medium placeholder:text-slate-400"
-                  value={location}
-                  onChange={(e) => setLocation(e.target.value)}
-                />
-              </div>
-              <button className="bg-royal-blue text-white px-10 py-4 rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-blue-800 transition-all active:scale-95 shadow-xl shadow-royal-blue/30">
-                Find Opportunities
-                <ArrowRight size={18} />
-              </button>
+        <div className="relative max-w-7xl mx-auto z-10 text-center lg:text-left grid grid-cols-1 lg:grid-cols-5 gap-12 items-center">
+          <div className="lg:col-span-3">
+            <div className="inline-flex items-center gap-3 px-4 py-2 bg-royal-blue/5 rounded-full text-royal-blue border border-royal-blue/10 mb-8">
+              <span className="w-2 h-2 bg-royal-blue rounded-full animate-pulse" />
+              <span className="text-[10px] font-black uppercase tracking-widest">Global Acquisition Intelligence</span>
             </div>
-          </motion.div>
+            
+            <h1 className="text-6xl md:text-8xl font-black text-royal-blue mb-8 leading-[0.9] tracking-tighter">
+              Institutional <br />
+              <span className="text-blue-500">Acquisition</span> Hub.
+            </h1>
+            <p className="text-slate-500 text-lg md:text-xl max-w-xl mb-12 font-medium leading-relaxed mx-auto lg:mx-0">
+               Direct access to verified business assets across Tier-1 markets. 
+               Powered by strategic transparency.
+            </p>
+
+            {/* Premium Multi-Filter Search */}
+            <div className="max-w-4xl bg-white rounded-[40px] border border-slate-100 shadow-2xl shadow-royal-blue/10 p-2">
+               <div className="flex flex-col md:flex-row items-center gap-2">
+                  <div className="flex-1 flex items-center px-6 py-4 border-b md:border-b-0 md:border-r border-slate-50">
+                    <Search className="text-slate-300 mr-4 shrink-0" size={24} />
+                    <input 
+                      type="text" 
+                      placeholder="Title or description keyword..."
+                      className="w-full outline-none text-royal-blue font-bold placeholder:text-slate-300 bg-transparent text-lg"
+                      value={search}
+                      onChange={(e) => setSearch(e.target.value)}
+                    />
+                  </div>
+                  <button 
+                    onClick={() => setShowFilters(!showFilters)}
+                    className={cn(
+                      "flex items-center gap-3 px-8 py-4 rounded-3xl font-black uppercase tracking-widest text-[10px] transition-all",
+                      showFilters ? "bg-royal-blue text-white" : "text-royal-blue bg-royal-blue/5 hover:bg-royal-blue/10"
+                    )}
+                  >
+                    <Filter size={18} />
+                    {showFilters ? "Hide Metrics" : "Advanced Metrics"}
+                  </button>
+               </div>
+
+               {showFilters && (
+                 <div className="grid grid-cols-1 md:grid-cols-4 gap-6 p-8 border-t border-slate-50 animate-in fade-in slide-in-from-top-4 duration-500">
+                    <div className="space-y-3">
+                       <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Jurisdiction</label>
+                       <select 
+                         className="w-full bg-slate-50 border border-slate-100 p-4 rounded-2xl outline-none font-bold text-royal-blue text-sm appearance-none"
+                         value={countryFilter}
+                         onChange={(e) => setCountryFilter(e.target.value)}
+                       >
+                         <option>All</option>
+                         <option>UAE</option>
+                         <option>Qatar</option>
+                         <option>Singapore</option>
+                         <option>Malaysia</option>
+                       </select>
+                    </div>
+                    <div className="space-y-3">
+                       <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Asset Class</label>
+                       <select 
+                         className="w-full bg-slate-50 border border-slate-100 p-4 rounded-2xl outline-none font-bold text-royal-blue text-sm appearance-none"
+                         value={categoryFilter}
+                         onChange={(e) => setCategoryFilter(e.target.value)}
+                       >
+                         <option>All</option>
+                        <option>Micro Business</option>
+                        <option>Partnership Sale</option>
+                        <option>Full Business Sale</option>
+                        <option>Investment Opportunity</option>
+                       </select>
+                    </div>
+                    <div className="space-y-3">
+                       <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Capital Floor</label>
+                       <div className="relative">
+                          <IndianRupee className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={14} />
+                          <input 
+                            type="number" 
+                            placeholder="Min Price"
+                            className="w-full bg-slate-50 border border-slate-100 p-4 pl-10 rounded-2xl outline-none font-bold text-royal-blue text-sm"
+                            value={minPrice}
+                            onChange={(e) => setMinPrice(e.target.value)}
+                          />
+                       </div>
+                    </div>
+                    <div className="space-y-3">
+                       <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Capital Ceiling</label>
+                       <div className="relative">
+                          <IndianRupee className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={14} />
+                          <input 
+                            type="number" 
+                            placeholder="Max Price"
+                            className="w-full bg-slate-50 border border-slate-100 p-4 pl-10 rounded-2xl outline-none font-bold text-royal-blue text-sm"
+                            value={maxPrice}
+                            onChange={(e) => setMaxPrice(e.target.value)}
+                          />
+                       </div>
+                    </div>
+                 </div>
+               )}
+            </div>
+          </div>
+          
+          <div className="lg:col-span-2 hidden lg:block">
+             <div className="p-12 bg-royal-blue rounded-[80px] rotate-6 shadow-[0_40px_80px_rgba(0,35,102,0.3)]">
+                <div className="grid grid-cols-2 gap-6">
+                   <div className="h-40 bg-white/10 rounded-3xl backdrop-blur-md border border-white/10" />
+                   <div className="h-40 bg-white/5 rounded-3xl mt-12" />
+                   <div className="h-40 bg-white/20 rounded-3xl -mt-12" />
+                   <div className="h-40 bg-white/10 rounded-3xl" />
+                </div>
+             </div>
+          </div>
         </div>
       </section>
 
-      {/* Main Content */}
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-20 -mt-20 relative z-10">
-        <div className="flex flex-col md:flex-row justify-between items-end mb-12 gap-6">
-          <div className="flex-1">
-            <h2 className="text-3xl md:text-4xl font-extrabold text-royal-blue mb-4">
-              Featured Opportunities
-            </h2>
-            <div className="w-20 h-1.5 bg-blue-500 rounded-full" />
-          </div>
-          
-          <div className="flex gap-4">
-            <button className="flex items-center gap-2 px-5 py-2.5 bg-white border border-slate-200 rounded-xl text-slate-600 font-semibold hover:border-royal-blue hover:text-royal-blue transition-all">
-              <Filter size={18} />
-              Filter
-            </button>
-            <span className="bg-slate-100 text-slate-500 font-bold px-4 py-2.5 rounded-xl text-sm flex items-center">
-              {filteredListings.length} results
-            </span>
-          </div>
-        </div>
+      {/* Filtration Results */}
+      <main className="max-w-7xl mx-auto px-6 py-24">
+        <header className="flex justify-between items-end mb-16 border-b border-slate-100 pb-10">
+           <div>
+              <h2 className="text-3xl font-black text-royal-blue tracking-tight mb-2">Authenticated Opportunities</h2>
+              <p className="text-[10px] font-black uppercase tracking-[0.3em] text-slate-300">Audited Platform Assets • Global Connectivity</p>
+           </div>
+           <div className="text-[10px] font-black text-royal-blue uppercase tracking-widest px-4 py-2 bg-royal-blue/5 rounded-lg border border-royal-blue/10">
+              Matches Found: {listings.length}
+           </div>
+        </header>
 
         {loading ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-10">
             {[1, 2, 3, 4, 5, 6].map(i => (
-              <div key={i} className="bg-white rounded-2xl h-96 animate-pulse shadow-sm" />
+              <div key={i} className="bg-white rounded-[40px] h-[480px] animate-pulse border border-slate-50" />
+            ))}
+          </div>
+        ) : listings.length > 0 ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-10">
+            {listings.map(biz => (
+              <BusinessCard key={biz.id} business={biz} />
             ))}
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-            {filteredListings.length > 0 ? (
-              filteredListings.map(biz => (
-                <BusinessCard key={biz.id} business={biz} />
-              ))
-            ) : (
-              <div className="col-span-full py-20 text-center bg-white rounded-3xl border border-dashed border-slate-300">
-                <Search className="mx-auto text-slate-300 mb-4" size={48} />
-                <h3 className="text-xl font-bold text-slate-600">No matching business found</h3>
-                <p className="text-slate-400 mt-2">Try adjusting your search criteria or location</p>
-                <button 
-                  onClick={() => {setSearch(''); setLocation('');}}
-                  className="mt-6 text-royal-blue font-bold hover:underline"
-                >
-                  Clear all filters
-                </button>
-              </div>
-            )}
+          <div className="py-40 text-center bg-white rounded-[60px] border border-dashed border-slate-200">
+             <Globe className="mx-auto text-slate-200 mb-8" size={64} />
+             <h3 className="text-3xl font-black text-royal-blue">No Strategy Matches</h3>
+             <p className="text-slate-400 mt-4 font-bold max-w-sm mx-auto leading-relaxed">
+               Lower your institutional parameters or reset the search metrics to explore broader assets.
+             </p>
+             <button 
+               onClick={() => {
+                 setSearch('');
+                 setCountryFilter('All');
+                 setCategoryFilter('All');
+                 setMinPrice('');
+                 setMaxPrice('');
+               }}
+               className="mt-10 px-10 py-5 bg-royal-blue text-white rounded-[24px] font-black shadow-2xl shadow-royal-blue/30 hover:scale-105 active:scale-95 transition-all"
+             >
+               Purge Filter Stack
+             </button>
           </div>
         )}
-
-        {/* CTA Section */}
-        <section className="mt-32 relative rounded-[40px] bg-royal-blue px-8 py-16 md:p-20 overflow-hidden">
-          <div className="absolute top-0 right-0 w-1/3 h-full bg-blue-400/10 blur-[100px]" />
-          <div className="relative z-10 flex flex-col md:flex-row items-center gap-12">
-            <div className="flex-1 text-center md:text-left">
-              <h2 className="text-3xl md:text-5xl font-extrabold text-white mb-6">
-                Ready to sell your business?
-              </h2>
-              <p className="text-blue-100 text-lg mb-10 opacity-80 leading-relaxed max-w-xl">
-                Join thousands of entrepreneurs who have successfully exited through our platform. No hidden fees, just expert connections.
-              </p>
-              <div className="flex flex-col sm:flex-row gap-4 justify-center md:justify-start">
-                <button className="bg-white text-royal-blue px-10 py-5 rounded-2xl font-black hover:scale-105 active:scale-95 transition-all shadow-2xl">
-                  Get Started Now
-                </button>
-                <button className="bg-transparent text-white border-2 border-white/20 px-10 py-5 rounded-2xl font-bold hover:bg-white/5 transition-all">
-                  View Pricing
-                </button>
-              </div>
-            </div>
-            <div className="flex-1 grid grid-cols-2 gap-4">
-              <div className="bg-white/10 backdrop-blur-md p-6 rounded-3xl border border-white/10">
-                <div className="text-4xl font-black text-white mb-2">5k+</div>
-                <div className="text-blue-200 font-bold uppercase tracking-widest text-xs">Businesses Sold</div>
-              </div>
-              <div className="bg-white/10 backdrop-blur-md p-6 rounded-3xl border border-white/10 mt-8">
-                <div className="text-4xl font-black text-white mb-2">10k+</div>
-                <div className="text-blue-200 font-bold uppercase tracking-widest text-xs">Verified Buyers</div>
-              </div>
-              <div className="bg-white/10 backdrop-blur-md p-6 rounded-3xl border border-white/10">
-                <div className="text-4xl font-black text-white mb-2">₹500Cr+</div>
-                <div className="text-blue-200 font-bold uppercase tracking-widest text-xs">Transaction Value</div>
-              </div>
-              <div className="bg-white/10 backdrop-blur-md p-6 rounded-3xl border border-white/10 mt-8">
-                <div className="text-4xl font-black text-white mb-2">4.9/5</div>
-                <div className="text-blue-200 font-bold uppercase tracking-widest text-xs">Seller Rating</div>
-              </div>
-            </div>
-          </div>
-        </section>
       </main>
 
-      {/* Footer */}
-      <footer className="bg-slate-50 border-t border-slate-200 pt-20 pb-10">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-12 mb-20">
+      {/* Professional Footer */}
+      <footer className="bg-white border-t border-slate-100 pt-32 pb-16">
+        <div className="max-w-7xl mx-auto px-6">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-16 mb-24">
             <div className="col-span-1 md:col-span-1">
-              <Link to="/" className="inline-block group mb-6">
-                <Logo />
-              </Link>
-              <p className="text-slate-500 leading-relaxed font-medium">
-                India's most trusted marketplace for business acquisitions, institutional investment, and startup exits.
+              <Logo className="h-8 mb-8" />
+              <p className="text-slate-500 font-medium leading-relaxed">
+                Empowering international business acquisitions with precision, 
+                security, and high-tier institutional connections.
               </p>
             </div>
-            <div>
-              <h4 className="font-bold text-royal-blue mb-6 uppercase tracking-widest text-xs">Company</h4>
-              <ul className="space-y-4 text-slate-600 font-medium">
-                <li><Link to="/about" className="hover:text-royal-blue transition-colors">About Us</Link></li>
-                <li><Link to="/careers" className="hover:text-royal-blue transition-colors">Careers</Link></li>
-                <li><Link to="/press" className="hover:text-royal-blue transition-colors">Press</Link></li>
-              </ul>
-            </div>
-            <div>
-              <h4 className="font-bold text-royal-blue mb-6 uppercase tracking-widest text-xs">Sell</h4>
-              <ul className="space-y-4 text-slate-600 font-medium">
-                <li><Link to="/pricing" className="hover:text-royal-blue transition-colors">Pricing</Link></li>
-                <li><Link to="/register" className="hover:text-royal-blue transition-colors">Become a Seller</Link></li>
-                <li><Link to="/how-it-works" className="hover:text-royal-blue transition-colors">How it works</Link></li>
-              </ul>
-            </div>
-            <div>
-              <h4 className="font-bold text-royal-blue mb-6 uppercase tracking-widest text-xs">Legal</h4>
-              <ul className="space-y-4 text-slate-600 font-medium">
-                <li><Link to="/terms" className="hover:text-royal-blue transition-colors">Terms of Service</Link></li>
-                <li><Link to="/privacy" className="hover:text-royal-blue transition-colors">Privacy Policy</Link></li>
-                <li><Link to="/cookies" className="hover:text-royal-blue transition-colors">Cookie Policy</Link></li>
-              </ul>
-            </div>
+            {['Inves4Business', 'Service', 'Compliance'].map((cat, idx) => (
+              <div key={cat}>
+                <h4 className="font-black text-royal-blue mb-8 uppercase text-[10px] tracking-[0.3em]">{cat}</h4>
+                <ul className="space-y-5 text-slate-400 font-bold text-sm">
+                  {idx === 0 && ['About Platform', 'Network', 'Our Mission'].map(l => <li key={l} className="hover:text-royal-blue cursor-pointer transition-colors">{l}</li>)}
+                  {idx === 1 && ['Pricing Tiers', 'Listing Guide', 'Institutional Access'].map(l => <li key={l} className="hover:text-royal-blue cursor-pointer transition-colors">{l}</li>)}
+                  {idx === 2 && ['Security Protocol', 'Privacy Policy', 'Cookie Ledger'].map(l => <li key={l} className="hover:text-royal-blue cursor-pointer transition-colors">{l}</li>)}
+                </ul>
+              </div>
+            ))}
           </div>
-          <div className="pt-10 border-t border-slate-200 flex flex-col md:flex-row justify-between items-center gap-4 text-slate-400 text-sm font-bold tracking-tight">
-            <div>© 2026 Invest 4 Business. All rights reserved.</div>
-            <div className="flex gap-8 uppercase tracking-[0.2em] text-xs">
-              <a href="#" className="hover:text-royal-blue transition-colors">Twitter</a>
-              <a href="#" className="hover:text-royal-blue transition-colors">LinkedIn</a>
-              <a href="#" className="hover:text-royal-blue transition-colors">Instagram</a>
+          <div className="pt-12 border-t border-slate-50 flex flex-col md:flex-row justify-between items-center gap-8 text-[11px] font-black uppercase tracking-[0.2em] text-slate-300">
+            <div>© 2026 Inves4Business. All Rights Reserved.</div>
+            <div className="flex gap-10">
+              <span className="hover:text-royal-blue cursor-pointer">LinkedIN</span>
+              <span className="hover:text-royal-blue cursor-pointer">Twitter (X)</span>
+              <span className="hover:text-royal-blue cursor-pointer">Terminal</span>
             </div>
           </div>
         </div>

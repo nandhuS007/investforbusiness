@@ -8,11 +8,20 @@
         "name": { "type": "string" },
         "email": { "type": "string", "format": "email" },
         "phone": { "type": "string" },
-        "role": { "type": "string", "enum": ["buyer", "seller", "admin"] },
+        "role": { "type": "string", "enum": ["acquirer", "seller", "admin"] },
+        "status": { "type": "string", "enum": ["active", "blocked"] },
+        "businessName": { "type": "string" },
+        "location": {
+          "type": "object",
+          "properties": {
+            "country": { "type": "string", "enum": ["UAE", "Qatar", "Singapore", "Malaysia"] },
+            "city": { "type": "string" }
+          }
+        },
         "subscription": {
           "type": "object",
           "properties": {
-            "planId": { "type": "string" },
+            "planId": { "type": "string", "enum": ["Basic", "Intermediate", "Platinum"] },
             "active": { "type": "boolean" },
             "expiryDate": { "type": "string", "format": "date-time" }
           }
@@ -26,9 +35,15 @@
       "type": "object",
       "properties": {
         "title": { "type": "string" },
-        "category": { "type": "string", "enum": ["Micro Business", "Partnership Sale", "Full Business", "Investment"] },
+        "category": { "type": "string", "enum": ["Micro Business", "Partnership Sale", "Full Business Sale", "Investment Opportunity"] },
         "price": { "type": "number" },
-        "location": { "type": "string" },
+        "location": {
+          "type": "object",
+          "properties": {
+            "country": { "type": "string", "enum": ["UAE", "Qatar", "Singapore", "Malaysia"] },
+            "city": { "type": "string" }
+          }
+        },
         "description": { "type": "string" },
         "revenue": { "type": "number" },
         "profit": { "type": "number" },
@@ -36,23 +51,51 @@
         "documents": { "type": "array", "items": { "type": "string" } },
         "images": { "type": "array", "items": { "type": "string" } },
         "status": { "type": "string", "enum": ["under_review", "approved", "rejected"] },
+        "planApproved": { "type": "boolean" },
+        "planType": { "type": "string", "enum": ["Basic", "Intermediate", "Platinum"] },
         "isFeatured": { "type": "boolean" },
         "ownerId": { "type": "string" },
         "createdAt": { "type": "string", "format": "date-time" }
       },
-      "required": ["title", "category", "price", "location", "ownerId", "status"]
+      "required": ["title", "category", "price", "location", "ownerId", "status", "planApproved"]
+    },
+    "PlanRequest": {
+      "title": "PlanRequest",
+      "description": "Membership plan requests from asset owners",
+      "type": "object",
+      "properties": {
+        "assetOwnerId": { "type": "string" },
+        "businessId": { "type": "string" },
+        "planName": { "type": "string", "enum": ["Basic", "Intermediate", "Platinum"] },
+        "status": { "type": "string", "enum": ["pending", "approved", "rejected"] },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["assetOwnerId", "businessId", "planName", "status"]
     },
     "Enquiry": {
       "title": "Enquiry",
       "description": "User enquiries for business listings",
       "type": "object",
       "properties": {
-        "userId": { "type": "string" },
+        "acquirerId": { "type": "string" },
+        "ownerId": { "type": "string" },
         "businessId": { "type": "string" },
         "message": { "type": "string" },
         "createdAt": { "type": "string", "format": "date-time" }
       },
-      "required": ["userId", "businessId", "message"]
+      "required": ["acquirerId", "ownerId", "businessId", "message"]
+    },
+    "ChatMessage": {
+      "title": "ChatMessage",
+      "description": "Real-time messages between acquirer and owner",
+      "type": "object",
+      "properties": {
+        "enquiryId": { "type": "string" },
+        "senderId": { "type": "string" },
+        "text": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["enquiryId", "senderId", "text"]
     }
   },
   "firestore": {
@@ -64,9 +107,17 @@
       "schema": "Business",
       "description": "Business listings"
     },
+    "/plan_requests/{requestId}": {
+      "schema": "PlanRequest",
+      "description": "Asset owner membership plan requests"
+    },
     "/enquiries/{enquiryId}": {
       "schema": "Enquiry",
-      "description": "Customer enquiries"
+      "description": "Enquiries from acquirers"
+    },
+    "/enquiries/{enquiryId}/messages/{messageId}": {
+      "schema": "ChatMessage",
+      "description": "Chat messages within an enquiry"
     }
   }
 }

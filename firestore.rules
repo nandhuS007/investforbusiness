@@ -17,35 +17,44 @@ service cloud.firestore {
       return isSignedIn() && request.auth.uid == userId;
     }
 
+    function isHardcodedAdmin() {
+      return isSignedIn() && request.auth.token.email.lower() == 'nandhanandha2425@gmail.com';
+    }
+
     function isAdmin() {
-      return isSignedIn() && 
-             exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
-             get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+      return isHardcodedAdmin() || (isSignedIn() && 
+         exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin'
+      );
     }
 
     function isSeller() {
-      return isSignedIn() && 
-             exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
-             (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'seller' || 
-              get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin');
+      return isHardcodedAdmin() || (isSignedIn() && 
+         exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+         (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'seller' || 
+          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin')
+      );
     }
 
     function isValidId(id) {
       return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
     }
 
+    function incoming() { return request.resource.data; }
+    function existing() { return resource.data; }
+
     // --- Entity Validations ---
     function isValidUser(data) {
       return data.keys().hasAll(['uid', 'name', 'email', 'role']) &&
              data.uid == request.auth.uid &&
-             data.role in ['buyer', 'seller', 'admin'] &&
+             data.role in ['acquirer', 'seller', 'admin'] &&
              data.email is string && data.email.size() <= 256;
     }
 
     function isValidBusiness(data) {
       return data.keys().hasAll(['title', 'category', 'price', 'location', 'ownerId', 'status', 'createdAt']) &&
              data.title is string && data.title.size() <= 200 &&
-             data.category in ['Micro Business', 'Partnership Sale', 'Full Business', 'Investment'] &&
+             data.category in ['Micro Business', 'Partnership Sale', 'Full Business Sale', 'Investment Opportunity'] &&
              data.price is number && data.price >= 0 &&
              data.ownerId == request.auth.uid &&
              data.status in ['under_review', 'approved', 'rejected'] &&
@@ -54,47 +63,67 @@ service cloud.firestore {
 
     // --- Collections ---
 
-    // TEST CONNECTION
-    match /test/connection {
-      allow read: if true;
-    }
-
     // USERS
     match /users/{userId} {
-      allow read: if isSignedIn();
-      allow create: if isSignedIn() && isValidUser(request.resource.data);
+      allow get: if isSignedIn();
+      allow list: if isAdmin();
+      allow create: if isSignedIn() && isValidUser(incoming());
       allow update: if (isOwner(userId) && (
-        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['name', 'phone', 'subscription', 'role', 'createdAt', 'photoURL']) &&
-        (request.resource.data.role != 'admin' || (resource.data != null && resource.data.role == 'admin'))
+        incoming().diff(existing()).affectedKeys().hasOnly(['name', 'phone', 'businessName', 'location', 'subscription', 'role', 'createdAt', 'photoURL']) &&
+        (incoming().role != 'admin' || (existing() != null && existing().role == 'admin'))
       )) || isAdmin();
     }
 
     // BUSINESSES
     match /businesses/{businessId} {
-      // Public can read approved listings
       allow get: if true;
-      allow list: if resource.data.status == 'approved';
+      allow list: if existing().status == 'approved' || isOwner(existing().ownerId) || isAdmin();
 
-      allow create: if isSeller() && isValidBusiness(request.resource.data);
+      allow create: if isSeller() && isValidBusiness(incoming());
       
       allow update: if (
-        // Action: Seller updates their own listing (not status or featured)
-        (isOwner(resource.data.ownerId) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['title', 'description', 'price', 'location', 'images', 'documents', 'revenue', 'profit', 'yearsOfOperation'])) ||
-        // Action: Admin updates anything (e.g. status)
-        (isAdmin())
+        // Action: Owner update
+        (isOwner(existing().ownerId) && incoming().diff(existing()).affectedKeys().hasOnly(['title', 'description', 'price', 'location', 'images', 'documents', 'revenue', 'profit', 'yearsOfOperation'])) ||
+        // Action: Admin update
+        isAdmin()
       );
       
-      allow delete: if isAdmin() || isOwner(resource.data.ownerId);
+      allow delete: if isAdmin();
+    }
+
+    // PLAN REQUESTS
+    match /plan_requests/{requestId} {
+      allow list: if isAdmin() || isOwner(existing().assetOwnerId); 
+      allow get: if isAdmin() || isOwner(existing().assetOwnerId);
+      allow create: if isSeller() && incoming().assetOwnerId == request.auth.uid;
+      allow update: if isAdmin();
     }
 
     // ENQUIRIES
     match /enquiries/{enquiryId} {
-      allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
-      allow read: if isSignedIn() && (
-        request.auth.uid == resource.data.userId || 
-        request.auth.uid == get(/databases/$(database)/documents/businesses/$(resource.data.businessId)).data.ownerId ||
-        isAdmin()
-      );
+      allow create: if isSignedIn() && incoming().acquirerId == request.auth.uid;
+      allow list: if isSignedIn() && (existing().acquirerId == request.auth.uid || existing().ownerId == request.auth.uid || isAdmin());
+      allow get: if isSignedIn() && (existing().acquirerId == request.auth.uid || existing().ownerId == request.auth.uid || isAdmin());
+    }
+
+    // CHATS
+    match /chats/{msgId} {
+      allow list: if isSignedIn() && (request.auth.uid in resource.data.participants || isAdmin());
+      allow get: if isSignedIn() && (request.auth.uid in resource.data.participants || isAdmin());
+      allow create: if isSignedIn() && request.auth.uid in request.resource.data.participants && request.resource.data.senderId == request.auth.uid;
+    }
+
+    // NOTIFICATIONS
+    match /notifications/{notifId} {
+      allow read: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin());
+      allow update: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin());
+      allow create: if isSignedIn();
+    }
+
+    // SUBSCRIPTIONS
+    match /subscriptions/{subId} {
+      allow read: if isAdmin() || isOwner(resource.data.assetOwnerId);
+      allow write: if isAdmin();
     }
   }
 }
